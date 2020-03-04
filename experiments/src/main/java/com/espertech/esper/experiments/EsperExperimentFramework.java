@@ -18,7 +18,6 @@ import no.uio.ifi.TracingFramework;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.*;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -53,6 +52,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
 
     ArrayList<String> queries = new ArrayList<>();
     Map<Integer, Map<String, Object>> allSchemas = new HashMap<>();
+    Map<Integer, String> esper_schemas = new HashMap<>();
     private String trace_output_folder;
 
     public void SetTraceOutputFolder(String f) {this.trace_output_folder = f;}
@@ -300,6 +300,38 @@ public class EsperExperimentFramework implements ExperimentAPI {
             String stream_name = (String) schema.get("name");
             streamNameToId.put(stream_name, stream_id);
 
+
+            StringBuilder esper_schema = new StringBuilder("create schema " + stream_name + " (");
+            for (Map<String, Object> j : (ArrayList<Map<String, Object>>) schema.get("tuple-format")) {
+                esper_schema.append(j.get("name"));
+                esper_schema.append(" ");
+                if (j.get("type").equals("string")) {
+                    esper_schema.append("string, ");
+                } else if (j.get("type").equals("bool")) {
+                    esper_schema.append("bool, ");
+                } else if (j.get("type").equals("int")) {
+                    esper_schema.append("int, ");
+                } else if (j.get("type").equals("float")) {
+                    esper_schema.append("double, ");
+                } else if (j.get("type").equals("double")) {
+                    esper_schema.append("double, ");
+                } else if (j.get("type").equals("long")) {
+                    esper_schema.append("long, ");
+                } else if (j.get("type").equals("number")) {
+                    esper_schema.append("double, ");
+                } else if (j.get("type").equals("timestamp")) {
+                    esper_schema.append("string, ");
+                } else if (j.get("type").equals("long-timestamp")) {
+                    esper_schema.append("long, ");
+                } else {
+                    throw new RuntimeException("Invalid attribute type in stream schema");
+                }
+            }
+            // We remove the final comma and space
+            esper_schema.setLength(esper_schema.length()-2);
+            esper_schema.append(");\n");
+            esper_schemas.put(stream_id, esper_schema.toString());
+
             StreamListener sl = new StreamListener() {
                 @Override
                 public String getChannelId() {
@@ -393,8 +425,8 @@ public class EsperExperimentFramework implements ExperimentAPI {
         }
 
         StringBuilder schemas_string = new StringBuilder();
-        for (Map<String, Object> schema : allSchemas.values()) {
-            schemas_string.append(schema.get("esper")).append("\n");
+        for (String esper_schema : esper_schemas.values()) {
+            schemas_string.append(esper_schema);
         }
 
         try {
