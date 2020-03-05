@@ -87,8 +87,8 @@ public class EsperExperimentFramework implements ExperimentAPI {
     }
 
     @Override
-    public String ProcessDataset(Map<String, Object> ds) {
-        System.out.println("ProcessDataset: ready to transmit tuples from dataset in file " + ds.get("file"));
+    public String SendDsAsStream(Map<String, Object> ds) {
+        System.out.println("SendDsAsStream: ready to transmit tuples from dataset in file " + ds.get("file"));
         int stream_id = (int) ds.get("stream-id");
         Map<String, Object> schema = allSchemas.get(stream_id);
         List<Map<String, Object>> tuples = readTuplesFromDataset(ds, schema);
@@ -293,7 +293,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
 
     int tupleCnt = 0;
     @Override
-    public String AddStreamSchemas(List<Map<String, Object>> schemas) {
+    public String AddSchemas(List<Map<String, Object>> schemas) {
         for (Map<String, Object> schema : schemas) {
             int stream_id = (int) schema.get("stream-id");
             allSchemas.put(stream_id, schema);
@@ -372,7 +372,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
     boolean isRuntimeActive = false;
 
     @Override
-    public String AddQueries(Map<String, Object> json_query) {
+    public String DeployQueries(Map<String, Object> json_query) {
         String query = (String) ((Map<String, Object>) json_query.get("sql-query")).get("esper");
         int query_id = (int) json_query.get("id");
         tf.traceEvent(221, new Object[]{query_id});
@@ -418,7 +418,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
     }
 
     @Override
-    public String RunEnvironment() {
+    public String StartRuntimeEnv() {
         StringBuilder allQueries = new StringBuilder();
         for (String q : queries) {
             allQueries.append(q).append("\n");
@@ -449,7 +449,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
     }
 
     @Override
-    public String StopEnvironment() {
+    public String StopRuntimeEnv() {
         tf.writeTraceToFile(this.trace_output_folder, this.getClass().getSimpleName());
         return "Success";
     }
@@ -466,14 +466,14 @@ public class EsperExperimentFramework implements ExperimentAPI {
     }
 
     @Override
-    public String SetNodeIdToAddress(Map<Integer, Map<String, Object>> newNodeIdToIpAndPort) {
+    public String SetNidToAddress(Map<Integer, Map<String, Object>> newNodeIdToIpAndPort) {
         nodeIdToIpAndPort = newNodeIdToIpAndPort;
-        System.out.println("SetNodeIdToAddress, node Id - IP and port: " + newNodeIdToIpAndPort);
+        System.out.println("SetNidToAddress, node Id - IP and port: " + newNodeIdToIpAndPort);
         return "Success";
     }
 
     @Override
-    public String AddSubscriberOfStream(int streamId, int nodeId) {
+    public String AddNextHop(int streamId, int nodeId) {
         if (!streamIdToNodeIds.containsKey(streamId)) {
             streamIdToNodeIds.put(streamId, new ArrayList<>());
         }
@@ -503,13 +503,13 @@ public class EsperExperimentFramework implements ExperimentAPI {
     }
 
     @Override
-    public String CleanupExperiment() {
+    public String EndExperiment() {
         tf.writeTraceToFile(this.trace_output_folder, this.getClass().getSimpleName());
         return "Success";
     }
 
     @Override
-    public String AddTracepointIds(List<Object> tracepointIds) {
+    public String AddTpIds(List<Object> tracepointIds) {
         for (int tracepointId : (List<Integer>) (List<?>) tracepointIds) {
             this.tf.addTracepoint(tracepointId);
         }
@@ -517,7 +517,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
     }
 
     @Override
-    public String NotifyAfterNoReceivedTuple(int milliseconds) {
+    public String RetEndOfStream(int milliseconds) {
         long time_diff;
         do {
             try {
