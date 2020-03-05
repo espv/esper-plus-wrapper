@@ -162,8 +162,9 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 fields.add((String) stringObjectMap.get("name"));
             }
 
+            String dataset_path = System.getenv().get("EXPOSE_PATH") + "/" + ds.get("file");
             try {
-                BufferedReader csvReader = new BufferedReader(new FileReader((String) ds.get("file")));
+                BufferedReader csvReader = new BufferedReader(new FileReader(dataset_path));
 
                 Map<String, Object> esper_attributes = new HashMap<>();
                 String row;
@@ -247,8 +248,9 @@ public class EsperExperimentFramework implements ExperimentAPI {
         if (tuples == null) {
             FileInputStream fis = null;
             Yaml yaml = new Yaml();
+            String dataset_path = System.getenv().get("EXPOSE_PATH") + "/" + ds.get("file");
             try {
-                fis = new FileInputStream(((String)ds.get("file")).replaceFirst("^~", System.getProperty("user.home")));
+                fis = new FileInputStream(dataset_path);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
             }
