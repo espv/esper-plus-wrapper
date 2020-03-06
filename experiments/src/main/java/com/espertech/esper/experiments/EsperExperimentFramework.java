@@ -264,14 +264,14 @@ public class EsperExperimentFramework implements ExperimentAPI {
 
     void ProcessTuple(int stream_id, String stream_name, Map<String, Object> mappedBean) {
         if (streamIdToNodeIds.containsKey(stream_id)) {
-            for (Integer nodeId : streamIdToNodeIds.get(stream_id)) {
+            for (int nodeId : streamIdToNodeIds.get(stream_id)) {
                 TCPNettyClient tcpNettyClient = nodeIdToClient.get(nodeId);
                 if (tcpNettyClient == null) {
                     tcpNettyClient = new TCPNettyClient(true, true);
                     nodeIdToClient.put(nodeId, tcpNettyClient);
                     try {
                         for (int nid : nodeIdToIpAndPort.keySet()) {
-                            if (nodeId.equals(nid)) {
+                            if (nodeId == nid) {
                                 Map<String, Object> addrAndPort = nodeIdToIpAndPort.get(nid);
                                 tcpNettyClient.connect((String) addrAndPort.get("ip"), (int) addrAndPort.get("port"));
                                 break;
