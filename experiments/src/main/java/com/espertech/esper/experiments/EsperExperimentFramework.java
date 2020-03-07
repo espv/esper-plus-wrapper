@@ -187,6 +187,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 csvReader.close();
             } catch (IOException e) {
                 e.printStackTrace();
+		System.exit(20);
             }
         } else if (ds.get("type").equals("yaml")) {
             List<Map<String, Object>> tuples = readTuplesFromDataset(ds, schema);
@@ -253,6 +254,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 fis = new FileInputStream(dataset_path);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
+		System.exit(21);
             }
             Map<String, Object> map = yaml.load(fis);
             tuples = (ArrayList<Map<String, Object>>) map.get("cepevents");
@@ -356,6 +358,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                         tf.traceEvent(100, new Object[]{Thread.currentThread().getId()});
                     } catch (EPException e) {
                         e.printStackTrace();
+			System.exit(16);
                     }
                 }
             };
@@ -435,6 +438,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
             runtime.getDeploymentService().undeployAll();
         } catch (EPUndeployException e) {
             e.printStackTrace();
+	    System.exit(16);
         }
         try {
             EPCompiled compiled = compiler.compile(schemas_string.toString() + allQueries.toString(), args);
@@ -445,6 +449,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
             }
         } catch (EPCompileException | EPDeployException | EPException e) {
             e.printStackTrace();
+	    System.exit(17);
         }
         timeLastRecvdTuple = 0;
         return "Success";
@@ -493,6 +498,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
             runtime.getDeploymentService().undeployAll();
         } catch (EPUndeployException e) {
             e.printStackTrace();
+	    System.exit(18);
         }
         return "Success";
     }
@@ -526,6 +532,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 Thread.sleep(milliseconds);
             } catch (InterruptedException e) {
                 e.printStackTrace();
+		System.exit(19);
             }
             time_diff = System.currentTimeMillis() - timeLastRecvdTuple;
         } while (time_diff < milliseconds || timeLastRecvdTuple == 0);
