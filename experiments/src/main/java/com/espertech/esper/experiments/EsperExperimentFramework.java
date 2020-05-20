@@ -18,6 +18,9 @@ import no.uio.ifi.TracingFramework;
 import org.yaml.snakeyaml.Yaml;
 
 import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -25,15 +28,6 @@ import java.util.Map;
 
 @SuppressWarnings("unchecked")
 public class EsperExperimentFramework implements ExperimentAPI {
-    private static final String EVENTTYPE = "";
-    private volatile boolean keepRunning = true;
-    private volatile int totalEventCount = 0;
-    private volatile int threadCnt = 0;
-    private int batch_size;
-    private int interval_wait;
-    private Map<String, Object> json_configuration;
-    private int totalPkts;
-    private int pktsPublished;
     private long timeLastRecvdTuple = 0;
     public TracingFramework tf = new TracingFramework();
     private int number_threads = 1;
@@ -54,18 +48,19 @@ public class EsperExperimentFramework implements ExperimentAPI {
     Map<Integer, Map<String, Object>> allSchemas = new HashMap<>();
     Map<Integer, String> esper_schemas = new HashMap<>();
     private String trace_output_folder;
+    Map<Integer, BufferedWriter> streamIdToCsvWriter = new HashMap<>();
 
     public void SetTraceOutputFolder(String f) {this.trace_output_folder = f;}
 
     @Override
     public String SetTupleBatchSize(int size) {
-        batch_size = size;
+        //batch_size = size;
         return "Success";
     }
 
     @Override
     public String SetIntervalBetweenTuples(int interval) {
-        interval_wait = interval;
+        //interval_wait = interval;
         return "Success";
     }
 
@@ -86,44 +81,93 @@ public class EsperExperimentFramework implements ExperimentAPI {
         return "Success";
     }
 
+    private Map<String, Object> GetMapFromYaml(Map<String, Object> ds) {
+        FileInputStream fis = null;
+        Yaml yaml = new Yaml();
+        String dataset_path = System.getenv().get("EXPOSE_PATH") + "/" + ds.get("file");
+        try {
+            fis = new FileInputStream(dataset_path);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+        return (Map<String, Object>) yaml.load(fis);
+    }
+
     @Override
     public String SendDsAsStream(Map<String, Object> ds) {
-        System.out.println("SendDsAsStream: ready to transmit tuples from dataset in file " + ds.get("file"));
-        int stream_id = (int) ds.get("stream-id");
-        Map<String, Object> schema = allSchemas.get(stream_id);
-        List<Map<String, Object>> tuples = readTuplesFromDataset(ds, schema);
-        System.out.println("Tuples are now read from file");
-        double prevTimestamp = 0;
-        long prevTime = System.nanoTime();
-        for (Map<String, Object> tuple : tuples) {
-            allPackets.clear();
-            AddTuples(tuple, 1);
-            if ((boolean) ds.getOrDefault("realism", false) && schema.containsKey("rowtime-column")) {
-                Map<String, Object> rowtime_column = (Map<String, Object>) schema.get("rowtime-column");
-                double timestamp = 0;
-                for (Map<String, Object> attribute : (List<Map<String, Object>>) tuple.get("attributes")) {
-                    if (attribute.get("name").equals(rowtime_column.get("column"))) {
-                        int nanoseconds_per_tick = (int) rowtime_column.get("nanoseconds-per-tick");
-                        timestamp = (double) attribute.get("value") * nanoseconds_per_tick;
-                        if (prevTimestamp == 0) {
-                            prevTimestamp = timestamp;
-                        }
-                        break;
-                    }
+        //System.out.println("Processing dataset");
+        int ds_id = (int) ds.get("id");
+        List<Map<String, Object>> tuples = datasetIdToTuples.get(ds_id);
+        if (tuples == null) {
+            Map<String, Object> map = GetMapFromYaml(ds);
+            List<Map<String, Object>> raw_tuples = (List<Map<String, Object>>) map.get("cepevents");
+            Map<Integer, List<Map<String, Object>>> ordered_tuples = new HashMap<>();
+            //int i = 0;
+            // Add order to tuples and place them in ordered_tuples
+            for (Map<String, Object> tuple : raw_tuples) {
+                //tuple.put("_order", i++);
+                int tuple_stream_id = (int) tuple.get("stream-id");
+                if (ordered_tuples.get(tuple_stream_id) == null) {
+                    ordered_tuples.put(tuple_stream_id, new ArrayList<>());
                 }
-                double time_diff_tuple = timestamp - prevTimestamp;
-                long time_diff_real = System.nanoTime() - prevTime;
-                while (time_diff_real < time_diff_tuple) {
-                    time_diff_real = System.nanoTime() - prevTime;
-                }
+                ordered_tuples.get(tuple_stream_id).add(tuple);
+            }
 
-                prevTimestamp = timestamp;
-                prevTime = System.nanoTime();
+            // Fix the type of the tuples in ordered_tuples
+            for (int stream_id : ordered_tuples.keySet()) {
+                Map<String, Object> schema = allSchemas.get(stream_id);
+                CastTuplesCorrectTypes(ordered_tuples.get(stream_id), schema);
             }
-            if (!allPackets.isEmpty()) {
-                ProcessTuples(1);
-            }
+
+            // Sort the raw_tuples by their order
+			/*raw_tuples.sort((lhs, rhs) -> {
+				int lhs_order = (int) lhs.get("_order");
+				int rhs_order = (int) rhs.get("_order");
+				return Integer.compare(lhs_order, rhs_order);
+			});*/
+
+            datasetIdToTuples.put(ds_id, raw_tuples);
+            tuples = raw_tuples;
         }
+		/*double prevTimestamp = 0;
+		//System.out.println("Ready to transmit tuples");
+		long prevTime = System.nanoTime();
+		boolean realism = (boolean) ds.getOrDefault("realism", false) && schema.containsKey("rowtime-column");
+		for (Map<String, Object> tuple : tuples) {
+			AddTuples(tuple, 1);
+
+			if (realism) {
+				Map<String, Object> rowtime_column = (Map<String, Object>) schema.get("rowtime-column");
+				double timestamp = 0;
+				for (Map<String, Object> attribute : (List<Map<String, Object>>) tuple.get("attributes")) {
+					if (attribute.get("name").equals(rowtime_column.get("column"))) {
+						int nanoseconds_per_tick = (int) rowtime_column.get("nanoseconds-per-tick");
+						timestamp = (double) attribute.get("value") * nanoseconds_per_tick;
+						if (prevTimestamp == 0) {
+							prevTimestamp = timestamp;
+						}
+						break;
+					}
+				}
+				double time_diff_tuple = timestamp - prevTimestamp;
+				long time_diff_real = System.nanoTime() - prevTime;
+				while (time_diff_real < time_diff_tuple) {
+					time_diff_real = System.nanoTime() - prevTime;
+				}
+
+				prevTimestamp = timestamp;
+				prevTime = System.nanoTime();
+			}
+		}
+
+		if (!realism) {
+			ProcessTuples(tuples.size());
+		}*/
+
+        for (Map<String, Object> tuple : tuples) {
+            AddTuples(tuple, 1);
+        }
+        ProcessTuples(tuples.size());
         return "Success";
     }
 
@@ -187,7 +231,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 csvReader.close();
             } catch (IOException e) {
                 e.printStackTrace();
-		System.exit(20);
+        		System.exit(20);
             }
         } else if (ds.get("type").equals("yaml")) {
             List<Map<String, Object>> tuples = readTuplesFromDataset(ds, schema);
@@ -254,7 +298,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 fis = new FileInputStream(dataset_path);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
-		System.exit(21);
+		        System.exit(21);
             }
             Map<String, Object> map = yaml.load(fis);
             tuples = (ArrayList<Map<String, Object>>) map.get("cepevents");
@@ -344,21 +388,29 @@ public class EsperExperimentFramework implements ExperimentAPI {
 
                 @Override
                 public void onMessage(Map<String, Object> message) {
-                    if (++tupleCnt % 10000 == 0) {
-                        System.out.println("Received tuple " + tupleCnt + ": " + message);
-                    }
+                    // if (++tupleCnt % 10000 == 0) {
+                    System.out.println("Received tuple " + (++tupleCnt) + ": " + message);
+                    //}
                     onEvent(message);
                 }
 
                 public void onEvent(Map<String, Object> mappedBean) {
                     timeLastRecvdTuple = System.currentTimeMillis();
+                    BufferedWriter writer = streamIdToCsvWriter.get(stream_id);
+                    if (writer != null) {
+                        try {
+                            writer.write(mappedBean.toString() + "\n");
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                    }
                     try {
                         tf.traceEvent(1, new Object[]{Thread.currentThread().getId()});
                         runtime.getEventService().sendEventMap(mappedBean, stream_name);
                         tf.traceEvent(100, new Object[]{Thread.currentThread().getId()});
                     } catch (EPException e) {
                         e.printStackTrace();
-			System.exit(16);
+                        System.exit(16);
                     }
                 }
             };
@@ -379,6 +431,9 @@ public class EsperExperimentFramework implements ExperimentAPI {
     @Override
     public String DeployQueries(Map<String, Object> json_query) {
         String query = (String) ((Map<String, Object>) json_query.get("sql-query")).get("esper");
+        if (query == null || query.equals("")) {
+            return "Empty query";
+        }
         int query_id = (int) json_query.get("id");
         tf.traceEvent(221, new Object[]{query_id});
         queries.add(query);
@@ -418,7 +473,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
             ProcessTuple(stream_id, stream_name, mappedBean);
         }
 
-        pktsPublished = 0;
+        //pktsPublished = 0;
         return "Success";
     }
 
@@ -438,10 +493,11 @@ public class EsperExperimentFramework implements ExperimentAPI {
             runtime.getDeploymentService().undeployAll();
         } catch (EPUndeployException e) {
             e.printStackTrace();
-	    System.exit(16);
+	        System.exit(16);
         }
         try {
-            EPCompiled compiled = compiler.compile(schemas_string.toString() + allQueries.toString(), args);
+            String toDeploy = schemas_string.toString() + allQueries.toString();
+            EPCompiled compiled = compiler.compile(toDeploy, args);
             ExperimentListener listener = new ExperimentListener();
             EPStatement[] stmts = runtime.getDeploymentService().deploy(compiled).getStatements();
             for (EPStatement stmt : stmts) {
@@ -449,7 +505,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
             }
         } catch (EPCompileException | EPDeployException | EPException e) {
             e.printStackTrace();
-	    System.exit(17);
+	        System.exit(17);
         }
         timeLastRecvdTuple = 0;
         return "Success";
@@ -479,6 +535,41 @@ public class EsperExperimentFramework implements ExperimentAPI {
         return "Success";
     }
 
+
+    @Override
+    public String WriteStreamToCsv(int stream_id, String csv_folder) {
+        int cnt = 1;
+        boolean finished = false;
+        while (!finished) {
+            String path = csv_folder + "/esper/" + cnt;
+            Path p = Paths.get(path);
+            if (Files.exists(p)) {
+                ++cnt;
+                continue;
+            }
+            File f = new File(path);
+            if (!f.getParentFile().exists()){
+                f.getParentFile().mkdirs();
+            }
+            try {
+                f.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            FileWriter fw = null;
+            try {
+                fw = new FileWriter(f);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            BufferedWriter bw = new BufferedWriter(fw);
+            streamIdToCsvWriter.put(stream_id, bw);
+            finished = true;
+        }
+        return "Success";
+    }
+
+
     @Override
     public String AddNextHop(int streamId, int nodeId) {
         if (!streamIdToNodeIds.containsKey(streamId)) {
@@ -498,7 +589,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
             runtime.getDeploymentService().undeployAll();
         } catch (EPUndeployException e) {
             e.printStackTrace();
-	    System.exit(18);
+	        System.exit(18);
         }
         return "Success";
     }
@@ -513,6 +604,13 @@ public class EsperExperimentFramework implements ExperimentAPI {
     @Override
     public String EndExperiment() {
         tf.writeTraceToFile(this.trace_output_folder, this.getClass().getSimpleName());
+        for (BufferedWriter w : streamIdToCsvWriter.values()) {
+            try {
+                w.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
         return "Success";
     }
 
@@ -532,7 +630,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
                 Thread.sleep(milliseconds);
             } catch (InterruptedException e) {
                 e.printStackTrace();
-		System.exit(19);
+		        System.exit(19);
             }
             time_diff = System.currentTimeMillis() - timeLastRecvdTuple;
         } while (time_diff < milliseconds || timeLastRecvdTuple == 0);
@@ -553,8 +651,11 @@ public class EsperExperimentFramework implements ExperimentAPI {
         //File configFile = new File("/home/espen/Research/PhD/Private-WIP/stream-processing-benchmark-wip/" +
         //        "Experiments/experiment-configurations/SPE-specific-files/esper/movsim.esper.cfg.xml");
         //config.configure(configFile);
-        config.getRuntime().getThreading().setInternalTimerEnabled(false);
-        config.getRuntime().getThreading().setListenerDispatchPreserveOrder(false);
+
+        // This line caused batch windows to fail
+        //config.getRuntime().getThreading().setInternalTimerEnabled(false);
+
+        //config.getRuntime().getThreading().setListenerDispatchPreserveOrder(false);
         runtime = EPRuntimeProvider.getRuntime("EsperExperimentFramework", config);
         runtime.initialize();
         eventService = runtime.getEventService();
