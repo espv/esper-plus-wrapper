@@ -541,7 +541,7 @@ public class EsperExperimentFramework implements ExperimentAPI {
         int cnt = 1;
         boolean finished = false;
         while (!finished) {
-            String path = System.getenv().get("EXPOSE_PATH") + csv_folder + "/esper/" + cnt;
+            String path = System.getenv().get("EXPOSE_PATH") + "/" + csv_folder + "/esper/" + cnt;
             Path p = Paths.get(path);
             if (Files.exists(p)) {
                 ++cnt;
