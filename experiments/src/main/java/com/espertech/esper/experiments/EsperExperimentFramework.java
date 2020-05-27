@@ -388,9 +388,9 @@ public class EsperExperimentFramework implements ExperimentAPI {
 
                 @Override
                 public void onMessage(Map<String, Object> message) {
-                    // if (++tupleCnt % 10000 == 0) {
-                    System.out.println("Received tuple " + (++tupleCnt) + ": " + message);
-                    //}
+                    /*if (++tupleCnt % 100000 == 0) {
+                        System.out.println("Received tuple " + (++tupleCnt) + ": " + message);
+                    }*/
                     onEvent(message);
                 }
 
