@@ -648,9 +648,9 @@ public class EsperExperimentFramework implements ExperimentAPI {
         System.out.println("Configure");
         // We only add schemas once
         isRuntimeActive = true;
-        //File configFile = new File("/home/espen/Research/PhD/Private-WIP/stream-processing-benchmark-wip/" +
-        //        "Experiments/experiment-configurations/SPE-specific-files/esper/movsim.esper.cfg.xml");
-        //config.configure(configFile);
+        File configFile = new File(System.getenv("EXPOSE_PATH") + "/SPE-specific/esper/udfs.esper.cfg.xml");
+        config.configure(configFile);
+        //config.configure(System.getenv("EXPOSE_PATH") + "/SPE-specific/esper/udfs.esper.cfg.xml");
 
         // This line caused batch windows to fail
         //config.getRuntime().getThreading().setInternalTimerEnabled(false);
